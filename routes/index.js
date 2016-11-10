@@ -2,7 +2,7 @@ var express = require('express');
 var router = express.Router();
 var Cart = require('../models/cart');
 var Product = require('../models/product');
-
+var Order = require('../models/order.js');
 
 
 /* GET home page. */
@@ -42,7 +42,7 @@ router.get('/shopping-cart', function(req, res, next){
   console.log(cart);
 });
 
-router.get('/checkout', function(req, res, next) {
+router.get('/checkout', isLoggedIn, function(req, res, next) {
   if (!req.session.cart) {
     return res.redirect('/shopping-cart', {products: null});
   }
@@ -51,7 +51,7 @@ router.get('/checkout', function(req, res, next) {
   res.render('shop/checkout', {total: cart.totalPrice, errMsg: errMsg, noError: !errMsg});
 });
 
-router.post('/checkout', function(req, res, next){
+router.post('/checkout', isLoggedIn, function(req, res, next){
   if (!req.session.cart) {
     return res.redirect('/shopping-cart');
   }
@@ -70,11 +70,28 @@ stripe.charges.create({
     req.flash('error', err.message);
     return res.redirect('/checkout');
   }
-  req.flash('success', 'Payment Successful')
-  req.cart = null;
-  res.redirect('/');
+  var order = new Order({
+    user: req.user,
+    cart: cart,
+    address: req.body.address,
+    name: req.body.name,
+    paymentId: charge.id
+  });
+  order.save(function(err, result) {
+    req.flash('success', 'Payment Successful')
+    req.session.cart = null;
+    res.redirect('/');
+    });
+  });
+});
 
-});
-});
 
 module.exports = router;
+
+function isLoggedIn(req, res, next){
+  if(req.isAuthenticated()){
+    return next();
+  }
+  req.session.oldUrl = req.url;
+  res.redirect('/user/signin');
+}
